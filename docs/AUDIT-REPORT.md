@@ -19,10 +19,27 @@
 | 拖拽/选中/属性联动 | ✅ | 属性修改 → 画布与 TSX 同步（`e2e-results.json` C_*），`evidence-02/03` |
 | TSX 输出可独立编译 | ✅ | 生成源码经独立 Vite 构建成功（F_*，`evidence-06-preview-drawer.png`） |
 | 反向解析 | ✅ | 静态 JSX 解析回画布成功（E_*，`evidence-05-roundtrip.png`） |
-| 代码保护 | ✅ | 语法错误/动态表达式/spread/未知组件均抛错且不覆盖源码（D_* + 引擎 15 项断言） |
+| 代码保护 | ✅ | 语法错误/动态表达式/spread/未知组件均抛错且不覆盖源码（D_* + 引擎 32 项断言） |
 | 独立构建预览 | ✅ | 真实 Vite 构建 + iframe 隔离渲染，构建 ID 回显，失败返回 422 + 真实错误（F2） |
 
 ## 2. 目录与源码审查
+
+### 2.0 技术约束合规对照（目标 §2）
+
+| 领域 | 约束 | 实际 | 合规 |
+|---|---|---|---|
+| 框架 | React + TypeScript | React 19.3.1 + TS 6.0.2 strict | ✅ |
+| UI | Ant Design 官方组件 | antd 6.7.1 直接 import 渲染（DOM 类名实证） | ✅ |
+| 企业组件 | ProComponents | @ant-design/pro-components 3.1.15-9 | ✅ |
+| 拖拽 | dnd-kit 或论证替代 | @dnd-kit/core 6.3.1 + utilities 3.2.2（面板拖入/画布移动/容器投放） | ✅ |
+| 状态 | Zustand 或论证替代 | **React useState + 纯函数 tree-ops**（论证：单一事实来源是 DesignDocument 不可变快照，全部编辑收敛于 `commitDocument` 一个入口，撤销栈即文档快照数组；无跨组件共享可变状态需求，引入外部 store 反而增加 IR 一致性风险。若后续多标签页/协作编辑，迁移 Zustand 成本仅为替换 Studio 顶层 state） | ✅（经论证的替代） |
+| 编辑器 | Monaco Editor | monaco-editor 0.57.0 + @monaco-editor/react 4.7.0 | ✅ |
+| AST | Babel Parser + Recast | @babel/parser 7.29.14 真实 AST 解析 ✅；**Recast 增量源码 patch 未落地**（当前反向解析为全量重建 IR + 稳定 ID 复用），已列 R-1/R-3 并有明确路线 | ⚠️ 部分（如实披露） |
+| 构建 | Vite | vite 8.3.8（设计器构建 + 独立预览构建均真实调用） | ✅ |
+| 预览 | 独立运行环境 | 独立进程 4175 + 隔离 workspace + 不同 origin iframe | ✅ |
+| 数据 | Design IR 统一事实来源 | v2：迁移闸门、纯函数操作、双向同步合同（docs/DESIGN-IR.md） | ✅ |
+
+禁止项核查：无自绘冒充 ✅、无截图/静态 HTML 冒充预览 ✅（iframe 加载的是 vite build 产物 hash 资源）、JSON 不作为交付代码 ✅（交付物为 .tsx）、无字符串替换冒充 AST ✅（@babel/parser）、设计器运行时不是导出项目依赖 ✅（预览 workspace 仅 import react/antd/pro-components）。
 
 ```
 src/
@@ -143,27 +160,26 @@ npm run dev          # 同时启动 5173 设计器 + 4175 构建服务
 
 ## 6. 遗留问题清单（按风险排序）
 
-| # | 问题 | 影响 | 建议 |
+| # | 问题 | 影响 | 状态 / 建议 |
 |---|---|---|---|
-| R-1 | 反向解析为全量重建，节点 ID 不稳定 | 选中态丢失、无法增量 patch | 引入 Recast 保留格式 + sourceMap 映射 |
-| R-2 | 属性元数据手工维护（9 组件子集） | 覆盖不了官方 API，维护成本线性增长 | 建 `.d.ts` 自动采集管线（目标第 C 节） |
-| R-3 | codegen 模板拼接，非 AST/Recast 双向 | 与目标约束"Babel Parser + Recast"有差距 | 下轮实现 source patch |
-| R-4 | ~~独立构建未含 tsc 类型检查~~ **已修复**（见第 5 节） | — | 后续可加构建超时与资源限额 |
-| R-5 | `props.children` 与 `children[]` 双通道 | IR 语义含糊 | 统一文本子节点建模 |
-| R-6 | 画布内排序/组件树/插槽缺失 | 编辑效率受限 | 下轮实现同级排序 + 树面板 |
-| R-7 | ProComponents 使用 RC 版 `3.1.15-9` | 上游 API 可能变动 | 锁定并建版本矩阵测试 |
-| R-8 | npm audit 4 漏洞（2 critical） | 供应链风险 | `npm audit` 定位后评估修复 |
-| R-9 | 撤销栈不含代码编辑、无持久化保存 | 误操作可丢代码改动 | 统一命令栈 + localStorage/服务端保存 |
-| R-10 | antd Drawer `width` deprecation | 未来破坏性 | 改 `size` |
+| R-1 | 反向解析为全量重建 | ~~选中态丢失~~ | **部分修复**：稳定节点 ID 已实现（位置+类型复用）；剩余：Recast 保留格式 + sourceMap |
+| R-2 | 属性元数据手工维护（9 组件子集） | 覆盖不了官方 API，维护成本线性增长 | 未动；建 `.d.ts` 自动采集管线（目标第 C 节） |
+| R-3 | codegen 模板拼接，非 AST/Recast 双向 | 与目标约束"Babel Parser + Recast"有差距 | 未动；下轮实现 source patch |
+| R-4 | ~~独立构建未含 tsc 类型检查~~ | — | **已修复**（轮次 1，见 5.1）；后续可加构建超时与资源限额 |
+| R-5 | ~~`props.children` 与 `children[]` 双通道~~ | — | **已修复**（轮次 2，IR v2 + 自动迁移，见 5.2） |
+| R-6 | ~~画布内排序/组件树缺失~~ | 插槽编辑仍缺 | **基本修复**（轮次 2：树面板+移动+排序）；剩余：slot 编辑器、精确插入位置指示 |
+| R-7 | ProComponents 使用 RC 版 `3.1.15-9` | 上游 API 可能变动 | 未动；锁定并建版本矩阵测试 |
+| R-8 | npm audit 4 漏洞（2 critical） | 供应链风险 | 未动；定位后评估修复 |
+| R-9 | 撤销栈不含代码编辑、无持久化保存 | 误操作可丢代码改动 | 未动；统一命令栈 + localStorage/服务端保存 |
+| R-10 | ~~antd Drawer/Alert deprecation~~ | — | **已修复**（轮次 2）：控制台实测 0 error |
 
-## 6. 下一阶段建议（优先级）
+## 7. 下一阶段建议（优先级）
 
-1. **构建管线补类型检查**（R-4，验收项 F 直接要求，工作量小）。
-2. **Recast 源码 patch 双向同步**（R-1/R-3，核心架构固化点）。
-3. **元数据采集器 MVP**：从 antd `.d.ts` 抽取 props→编辑器映射，先覆盖 Form/Table/Modal（R-2）。
-4. 组件树面板 + 同级排序（R-6）。
-5. IR v2：slots/meta/sourceMap + migration（R-5）。
-6. 测试工程化：把 `tests/` 纳入 `npm test`（vitest + playwright 双轨）。
+1. **Recast 源码 patch 双向同步**（R-1 收尾/R-3，核心架构最后一块：保留用户格式、节点 sourceMap、Code Node 混合编辑）。
+2. **元数据采集器 MVP**：从 antd `.d.ts` 抽取 props→编辑器映射，先覆盖 Form/Table/Modal（R-2）。
+3. **slot/event/code 结构化编辑器**（接口已在 PropDefinition.editor 预留）。
+4. **持久化保存 + 统一命令栈**（R-9）：localStorage 起步，撤销覆盖代码 Tab 编辑。
+5. R-7 版本兼容矩阵测试；R-8 npm audit 修复评估。
 
 ---
 *本报告由逐文件审查与真实运行日志生成；证据文件均在仓库 `evidence/` 目录。*
