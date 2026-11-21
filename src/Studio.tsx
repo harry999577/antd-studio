@@ -285,7 +285,7 @@ export default function Studio() {
                     <Button size="small" type="primary" onClick={applyCode}>解析并同步画布</Button>
                   </Space>
                 </div>
-                {codeError && <Alert type="warning" showIcon message="代码未同步到画布" description={codeError} closable onClose={() => setCodeError(null)} />}
+                {codeError && <Alert type="warning" showIcon title="代码未同步到画布" description={codeError} closable onClose={() => setCodeError(null)} />}
                 <Editor
                   height="100%"
                   language="typescript"
@@ -416,7 +416,7 @@ export default function Studio() {
         title={<Space><PlayCircleOutlined /> 独立构建预览 <Tag color="success">Build</Tag></Space>}
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
-        width="min(1120px, 92vw)"
+        size="min(1120px, 92vw)"
         destroyOnHidden
         extra={<Button icon={<DownloadOutlined />} onClick={exportTsx}>导出当前 TSX</Button>}
       >
@@ -427,7 +427,7 @@ export default function Studio() {
         {previewUrl ? (
           <iframe className="built-preview-frame" title="构建预览页面" src={previewUrl} sandbox="allow-scripts allow-forms allow-popups allow-same-origin" />
         ) : <Empty description="尚无构建产物" />}
-        <Alert type="info" showIcon message="独立构建产物" description="此预览由真实 Vite 构建生成，与设计器画布分离。当前本地 MVP 禁止预览页面直接访问外部网络；生产部署必须使用独立 Worker / 容器隔离不可信构建任务。" style={{ marginTop: 12 }} />
+        <Alert type="info" showIcon title="独立构建产物" description="此预览由真实 Vite 构建生成，与设计器画布分离。当前本地 MVP 禁止预览页面直接访问外部网络；生产部署必须使用独立 Worker / 容器隔离不可信构建任务。" style={{ marginTop: 12 }} />
       </Drawer>
     </div>
   );

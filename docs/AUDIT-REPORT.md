@@ -83,9 +83,11 @@ server/index.mjs        独立构建服务（express + vite.build API，端口 4
 - ✅ Registry + 元数据（label/package/category/props/defaultProps/canHaveChildren）+ 编辑器控件类型（input/switch/select/number/json）。
 - ⚠️ **缺口**：仅 9 组件；属性为手工子集而非从官方 `.d.ts` 自动采集；复杂属性（columns/dataSource/options）目前只有 JSON 文本框（已预留 `editor: 'json'` 接口但未做结构化编辑器）。
 
-### D. 可视化编辑器 —— 达标（MVP 口径）
-- ✅ 左侧面板（搜索/分组/计数）、中央画布（真实渲染+选中高亮+类型标签）、右侧属性面板（联动+节点 ID+删除）、容器嵌套投放（Flex/Card/ProCard droppable）、拖拽添加、主题 Token 编辑。
-- ⚠️ **缺口**：无独立组件树视图；画布内节点间拖拽排序未实现（只能拖入，不能重排）；无插槽。
+### D. 可视化编辑器 —— 达标（第二轮后）
+- ✅ 左侧面板（搜索/分组/计数）、中央画布（真实渲染+选中高亮+类型标签）、右侧属性面板（联动+节点 ID+父节点 ID+删除）、容器嵌套投放（Flex/Card/ProCard droppable）、拖拽添加、主题 Token 编辑。
+- ✅ **组件树面板**（第二轮新增）：第四栏缩进树，文本子节点可见，点击与画布选中双向联动。
+- ✅ **画布内移动与排序**（第二轮新增）：节点拖拽手柄（dnd-kit）移动到容器内/同级位置；属性面板上移/下移；拒绝移入自身后代；撤销可恢复。
+- ⚠️ 缺口：插槽编辑仍为预留接口；拖拽排序目前为"移动到目标"而非精确插入位置指示。
 
 ### E. 代码生成与双向联动 —— 达标（受限静态子集）
 - ✅ IR→TSX、Monaco 展示、画布改动即时同步代码、静态 JSX 解析回画布、失败保护原始代码、不支持的动态代码显式报错不静默丢失。
@@ -110,24 +112,34 @@ npm run build        # 退出码 0，见 evidence/build.log
 npm run dev          # 同时启动 5173 设计器 + 4175 构建服务
 ```
 
-### 4.2 引擎确定性测试（15 项断言全过）
-`tests/engine-roundtrip.test.ts`（rolldown 打包后 node 运行）：codegen 结构 6 项、解析回环 4 项、代码保护 4 项（未知组件/动态表达式/spread/额外 import 均抛错）、编辑同步 1 项。
+### 4.2 引擎确定性测试（第二轮 32 项断言全过）
+`tests/engine-roundtrip.test.ts`（`npm run test:engine`：rolldown 打包后 node 运行）：IR v2 模型 2 项、v1→v2 迁移 5 项（含未来版本拒绝）、codegen 结构 5 项、解析回环+稳定 ID 4 项、代码保护 5 项（未知组件/动态表达式/spread/额外 import/保留名 children）、树操作 11 项（find/parent/descendant/remove/append/move inside/move sibling/拒绝移入自身后代/拒绝移根/同级交换/边界/文本通道）。
 
 ### 4.3 E2E（Playwright + Chromium，UI 全流程）
-`tests/smoke.e2e.py` → `evidence/e2e-results.json`：A(真实组件计数) B(选中联动) C(属性→画布+代码同步) D(坏代码报错+源码保留+画布不动) E(静态 JSX 解析回画布+旧文档替换) F(点击构建预览→iframe 内真实 antd 按钮渲染 ROUNDTRIP-OK，日志"构建成功 · e721052b9cec4082")。截图 6 张存于 `evidence/`。
+`tests/smoke.e2e.py`（`npm run test:e2e`）→ `evidence/e2e-results.json`：A(真实组件计数 ant-btn×21/pro-table×1/input×5) B(选中联动+文本通道 v2) B2(组件树 13 行+点击联动画布选中) B3(同级下移生效+撤销恢复顺序) C(属性→画布+代码同步) D(坏代码报错+源码保留+画布不动) E(静态 JSX 解析回画布+旧文档替换) F(点击构建预览→iframe 内真实 antd 按钮渲染 ROUNDTRIP-OK，日志"构建成功 · f7f957ad668a4a3e")。截图 7 张存于 `evidence/`。
 
 ### 4.4 测试环境注意事项（踩坑记录）
 - PowerShell `npm.ps1` 被执行策略拦截 → 用 `cmd /c "set PATH=D:\nodejs;%PATH% && npm ..."`。
 - Python stdout 为 GBK，打印中文断言结果会崩 → 结果写 UTF-8 JSON 文件。
 - `@monaco-editor/react` 默认 `window.monaco` 未初始化，需先渲染编辑器（切到 TSX Tab）后才能经 model API 操作；`.inputarea` 元素不可点击，键盘注入不可靠 → 用 `monaco.editor.getModels()[0].setValue()` 程序化注入（与用户输入等价触发 onChange→React state）。
 
-## 5. 本轮修复记录（R-4）
+## 5. 修复记录
 
-**独立构建补 TypeScript 类型检查**（`server/index.mjs`）：
+### 5.1 轮次 1：R-4 独立构建补 TypeScript 类型检查（`server/index.mjs`）
 - 新增 `typeCheckProject()`：在 Vite 打包前用 `ts.createProgram` 对 workspace 的 `main.tsx / Page.tsx / vite-env.d.ts` 做真实类型检查，复用主工程 `tsconfig.json` 选项（strict、react-jsx、Bundler 解析）。
 - 失败返回 `422 {stage:"typecheck", error:"TS2322 …"}`，画布/预览侧展示真实诊断；通过才进入 `vite build`。
 - 实测：合法代码 200 built；非法 prop `notARealProp` 被 TS2322 拦截。
 - 踩坑（TS 6.0）：ESM 导入的 `ts.sys` 形状与 `createProgram` host 不兼容（`useCaseSensitiveFileNames` 变 boolean、缺 `getDefaultLibFileName` 等）→ 改用 `createRequire` 加载 CJS 版 typescript + `ts.createCompilerHost`；`formatDiagnosticsWithColorAndContext` 的 host 必须含 `getCurrentDirectory` → 改为自研纯文本诊断格式化；CSS 副作用导入需 `declare module '*.css'` 环境文件。
+
+### 5.2 轮次 2：核心架构固化（R-5 / R-6 / R-1 第一步）
+
+- **R-5 修复**：Design IR v2——文本统一存 `children[]` string 条目，`props.children` 为保留名（解析报错保护）；`migrate.ts` 提供 v1→v2 自动迁移与版本闸门；`schemaVersion: 2`。规范见 `docs/DESIGN-IR.md`。
+- **R-6 修复**：组件树面板（第四栏，点击联动画布选中）；画布节点拖拽手柄移动（容器=inside / 叶子=同级 before，拒绝移入自身后代）；属性面板上移/下移按钮；`tree-ops.ts` 纯函数 API 成为唯一编辑入口。
+- **R-1 第一步**：反向解析按"位置+类型"复用旧节点 ID（`parseTsxToDocument(code, prevDoc)`），回环后 id 不漂移、选中态可保留。
+- **R-10 修复**：Drawer `width` → `size`、Alert `message` → `title`（antd 6 废弃警告清零，实测控制台 0 error）。
+- **测试工程化**：`npm test`（typecheck+引擎）/ `npm run test:engine` / `npm run test:e2e`。
+- 组件注册表扩充官方 API 子集（danger/ghost/href/maxLength/showCount/loading/dashed/ellipsis/copyable/pagination/flex），`slot|event|code` 编辑器接口预留。规范见 `docs/COMPONENT-REGISTRY.md`。
+- 验证：typecheck 零错误；build 退出码 0；引擎 32/32；E2E 全绿（含组件树联动、排序+撤销、构建预览 iframe）。
 
 ## 6. 遗留问题清单（按风险排序）
 

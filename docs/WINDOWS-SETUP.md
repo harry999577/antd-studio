@@ -60,14 +60,11 @@ npm run build        # tsc + vite build → 退出码 0，3710 模块（见 evid
 
 冒烟测试（需先 `npm run dev` 保持运行）：
 ```powershell
-# 引擎确定性测试（15 项断言）
-cmd /c "set PATH=D:\nodejs;%PATH% && node_modules\.bin\rolldown.cmd tests\engine-roundtrip.test.ts --format esm --file tests\.test-dist\engine-roundtrip.mjs --platform node && node tests\.test-dist\engine-roundtrip.mjs"
-# 期望末行： ENGINE_ALL_PASS (15 checks)
+npm test                    # typecheck + 引擎确定性测试（期望 ENGINE_ALL_PASS (32 checks)）
+npm run test:e2e            # Playwright E2E（需 python + playwright，见下）；期望 evidence\e2e-results.json 全部为真值，F_pass=true
 
-# E2E（Playwright，UI 全流程 + 构建预览）
-pip install playwright ; playwright install chromium   # 一次性
-py tests\smoke.e2e.py
-# 期望 evidence\e2e-results.json 全部为真值，F_pass=true
+# 单独跑引擎测试：
+npm run test:engine
 ```
 
 ## 5. 构建预览使用说明
@@ -84,3 +81,4 @@ py tests\smoke.e2e.py
 - **TS 6.0 API 变化**：ESM `ts.sys` 与 `createProgram` host 不兼容；`useCaseSensitiveFileNames` 由函数变 boolean。服务端已用 `createRequire` + `createCompilerHost` 适配。
 - **文件锁**：`server/index.mjs` 运行时被 node 进程锁定，编辑前需先停止 4175 服务。
 - **npm audit**：存在 4 个漏洞（2 low / 2 critical，dev 依赖链），未自动 `audit fix --force`（会破坏版本锁定），评估见审计报告 R-8。
+- **GitHub 推送需代理**：本机直连 github.com:443 失败，系统代理为 `127.0.0.1:10808`；已配置 `git config --global http.proxy http://127.0.0.1:10808`（https.proxy 同）。代理关闭时推送会失败。

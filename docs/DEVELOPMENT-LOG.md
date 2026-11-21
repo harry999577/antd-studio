@@ -29,7 +29,11 @@
 7. **测试升级**：引擎断言 15 → **32 项全过**（新增 v2 迁移 5 项、树操作 8 项、稳定 ID 3 项、保留名保护 1 项）；E2E 新增 B2（组件树联动）、B3（同级排序+撤销恢复）、B_text_channel_v2 断言，全部通过（`evidence/e2e-results.json`）。
 8. 踩坑修正：antd Button 两汉字自动加空格（"下 移"）→ 测试用正则 `\u4e0b\s*\u79fb`；`:scope > .canvas-node` 因包装层失配 → 按 `closest('.canvas-node')` 过滤。
 
-**验证**：typecheck 零错误；`npm run build` 退出码 0；引擎 32/32；E2E 全绿（含构建预览 iframe 真实渲染）。
+8. **R-10 清零**：Drawer `width`→`size`、Alert `message`→`title`；实测控制台 0 error（`evidence/console-warns.json` = `[]`）。
+9. **测试工程化**：`npm test` = typecheck + 引擎断言；`npm run test:engine`、`npm run test:e2e` 独立可跑。
+10. GitHub 推送网络问题定位：直连 443 失败、系统代理 127.0.0.1:10808 可用 → `git config --global http(s).proxy` 持久化，轮次 2 提交 `f6ab09e` 已推送。
+
+**验证**：typecheck 零错误；`npm run build` 退出码 0；引擎 32/32；E2E 全绿（含构建预览 iframe 真实渲染）；控制台 0 error。
 
 ## 遗留与下一步（按优先级）
 
@@ -37,5 +41,4 @@
 2. **R-2 元数据自动采集**：从 antd `.d.ts` 生成 ComponentMeta，先覆盖 Form/Table/Modal。
 3. **slot/event/code 编辑器实现**（接口已预留）。
 4. **R-9 持久化**：文档保存（localStorage → 后端）+ 撤销栈覆盖代码编辑。
-5. 测试工程化：`npm test` 聚合（vitest 跑引擎断言 + playwright 跑 E2E）。
-6. R-7 ProComponents RC 版本回归矩阵；R-8 npm audit 评估。
+5. R-7 ProComponents RC 版本回归矩阵；R-8 npm audit 评估。

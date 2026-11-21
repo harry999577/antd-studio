@@ -9,7 +9,10 @@
     "dev:preview-server": "node server/index.mjs",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "test:engine": "rolldown tests/engine-roundtrip.test.ts --format esm --file tests/.test-dist/engine-roundtrip.mjs --platform node && node tests/.test-dist/engine-roundtrip.mjs",
+    "test:e2e": "py tests/smoke.e2e.py",
+    "test": "npm run typecheck && npm run test:engine"
   },
   "dependencies": {
     "@ant-design/icons": "6.3.4",
