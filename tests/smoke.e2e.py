@@ -2,7 +2,7 @@
 """E2E smoke test for antd-studio designer. Evidence for objective sections D/E/F.
 Editor is driven through window.monaco model API (programmatic setValue fires the
 library onChange handler, identical to user typing at the React-state level)."""
-import asyncio, json
+import asyncio, json, re
 from playwright.async_api import async_playwright
 
 EV = "E:/ai/antd-studio/evidence"
@@ -13,7 +13,12 @@ JS_GET_VALUE = "() => { const m = window.monaco.editor.getModels(); return m.len
 JS_SET_VALUE = "(t) => { const m = window.monaco.editor.getModels(); if (m.length) m[0].setValue(t); }"
 
 async def wait_monaco(page):
-    await page.wait_for_function("() => window.monaco && window.monaco.editor.getModels().length > 0", timeout=60000)
+    try:
+        await page.wait_for_function("() => window.monaco && window.monaco.editor.getModels().length > 0", timeout=60000)
+    except Exception:
+        await page.screenshot(path=f"{EV}/evidence-fail-monaco.png")
+        body = await page.evaluate("document.body.innerText.slice(0, 400)")
+        raise RuntimeError(f"monaco not ready; body text: {body!r}")
 
 async def main():
     async with async_playwright() as p:
@@ -38,7 +43,36 @@ async def main():
         R["B_selected_node"] = await page.locator(".canvas-node--selected").count()
         R["B_props_fields"] = await page.locator(".props-form .prop-field").count()
         R["B_node_id"] = await page.locator(".node-meta").count()
+        R["B_text_channel_v2"] = await page.locator(".prop-field").filter(has_text="children").locator("input").last.input_value() == "查询"
         await page.screenshot(path=f"{EV}/evidence-02-selected.png")
+
+        # ---------- B2. component tree panel ----------
+        R["B2_tree_visible"] = await page.locator(".component-tree").count()
+        R["B2_tree_rows"] = await page.locator(".tree-row").count()
+        await page.locator("[data-tree-id='user-table']").first.click()
+        await page.wait_for_timeout(400)
+        R["B2_tree_select_sync"] = await page.locator("[data-node-id='user-table'].canvas-node--selected").count()
+        await page.screenshot(path=f"{EV}/evidence-02b-tree.png")
+
+        # ---------- B3. sibling reorder via up/down buttons ----------
+        ORDER_JS = """() => {
+          const row = document.querySelector('[data-node-id="search-row"]');
+          return Array.from(row.querySelectorAll('.canvas-node'))
+            .filter(n => n.parentElement && n.parentElement.closest('.canvas-node') === row)
+            .map(n => n.getAttribute('data-node-id'));
+        }"""
+        await page.locator("[data-node-id='search-submit']").first.click(force=True)
+        await page.wait_for_timeout(300)
+        before_order = await page.evaluate(ORDER_JS)
+        await page.locator("button").filter(has_text=re.compile("\u4e0b\\s*\u79fb")).first.click()
+        await page.wait_for_timeout(500)
+        after_order = await page.evaluate(ORDER_JS)
+        R["B3_reordered"] = before_order != after_order and after_order.index("search-submit") == before_order.index("search-submit") + 1
+        R["B3_order_detail"] = {"before": before_order, "after": after_order}
+        # undo restores order
+        await page.locator(".studio-topbar button:has(.anticon-undo)").first.click()
+        await page.wait_for_timeout(400)
+        R["B3_undo_restores"] = (await page.evaluate(ORDER_JS)) == before_order
 
         # ---------- C. prop edit -> canvas + code both update ----------
         children_input = page.locator(".prop-field").filter(has_text="children").locator("input").last

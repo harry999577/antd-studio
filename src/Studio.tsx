@@ -14,49 +14,15 @@ import { DndContext, useDroppable } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import PaletteItem from './components/PaletteItem';
 import CanvasNode from './components/CanvasNode';
+import ComponentTree from './components/ComponentTree';
 import { componentGroups, componentRegistry, createNode } from './engine/registry';
 import { generateTsx } from './engine/codegen';
 import { parseTsxToDocument } from './engine/tsx-parser';
 import { initialDocument } from './engine/sample-document';
+import { findNode, findParent, patchNode, removeNode, appendChild, moveNode, moveSibling, nodeText, setNodeText } from './engine/tree-ops';
 import type { ComponentType, DesignDocument, DesignNode } from './engine/types';
 
 const { Text } = Typography;
-
-function findNode(node: DesignNode, id: string): DesignNode | undefined {
-  if (node.id === id) return node;
-  for (const child of node.children) {
-    if (typeof child !== 'string') {
-      const found = findNode(child, id);
-      if (found) return found;
-    }
-  }
-  return undefined;
-}
-
-function patchNode(node: DesignNode, id: string, patch: (current: DesignNode) => DesignNode): DesignNode {
-  if (node.id === id) return patch(node);
-  return {
-    ...node,
-    children: node.children.map((child) => typeof child === 'string' ? child : patchNode(child, id, patch)),
-  };
-}
-
-function removeNode(node: DesignNode, id: string): DesignNode {
-  return {
-    ...node,
-    children: node.children
-      .filter((child) => typeof child === 'string' || child.id !== id)
-      .map((child) => typeof child === 'string' ? child : removeNode(child, id)),
-  };
-}
-
-function appendChild(node: DesignNode, targetId: string, child: DesignNode): DesignNode {
-  if (node.id === targetId) return { ...node, children: [...node.children, child] };
-  return {
-    ...node,
-    children: node.children.map((item) => typeof item === 'string' ? item : appendChild(item, targetId, child)),
-  };
-}
 
 function CanvasDropzone({ children, onClick }: { children: ReactNode; onClick: () => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'canvas-dropzone' });
@@ -125,16 +91,32 @@ export default function Studio() {
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
+    if (!ensureDesignEditable()) return;
+    const draggedNodeId = event.active.data.current?.nodeId as string | undefined;
     const type = event.active.data.current?.componentType as ComponentType | undefined;
-    if (!type || !event.over) return;
+    if (!event.over) return;
     const targetId = event.over.data.current?.targetNodeId as string | undefined;
+
+    if (draggedNodeId && targetId) {
+      const target = findNode(document.root, targetId);
+      if (!target) return;
+      const canReceive = componentRegistry[target.type].canHaveChildren;
+      const root = moveNode(document.root, draggedNodeId, targetId, {
+        position: canReceive ? 'inside' : 'before',
+        canReceive: (t) => componentRegistry[t].canHaveChildren,
+      });
+      if (root) commitDocument({ ...document, root });
+      else message.warning('不能把容器移动到它自己的子节点内部。');
+      return;
+    }
+    if (!type) return;
     if (targetId) addComponent(type, targetId);
     else if (event.over.id === 'canvas-dropzone') addComponent(type);
   };
 
   const applyCode = () => {
     try {
-      const next = parseTsxToDocument(code);
+      const next = parseTsxToDocument(code, document);
       commitDocument(next);
       setSelectedId(next.root.id);
       message.success('TSX 已解析并同步到设计画布');
@@ -260,6 +242,10 @@ export default function Studio() {
             </div>
           </aside>
 
+          <aside className="tree-panel">
+            <ComponentTree document={document} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setActiveTab('design'); }} />
+          </aside>
+
           <section className="center-panel">
             <div className="canvas-toolbar">
               <Tabs
@@ -312,7 +298,7 @@ export default function Studio() {
             )}
             <footer className="statusbar">
               <span><span className="status-dot" /> React + TypeScript</span>
-              <span>Design IR v1</span>
+              <span>Design IR v{document.schemaVersion}</span>
               <span>{codeDirty ? '代码有未同步修改' : '设计与代码已同步'}</span>
             </footer>
           </section>
@@ -357,14 +343,31 @@ export default function Studio() {
                       </div>
                     );
                   })}
-                  {Object.prototype.hasOwnProperty.call(selectedNode.props, 'children') && (
+                  {componentRegistry[selectedNode.type].supportsText && (
                     <div className="prop-field">
                       <div className="prop-label"><span>显示文案</span><Text type="secondary" code>children</Text></div>
-                      <Input size="small" value={String(selectedNode.props.children ?? '')} onChange={(event) => updateProp('children', event.target.value)} />
+                      <Input size="small" value={nodeText(selectedNode)} onChange={(event) => {
+                        if (!selectedId) return;
+                        const next = { ...document, root: patchNode(document.root, selectedId, (node) => setNodeText(node, event.target.value)) };
+                        commitDocument(next);
+                      }} />
                     </div>
                   )}
                   <Divider style={{ margin: '12px 0' }} />
+                  {selectedId !== document.root.id && (
+                    <Space.Compact block style={{ marginBottom: 8 }}>
+                      <Button size="small" block onClick={() => {
+                        const root = moveSibling(document.root, selectedNode.id, -1);
+                        if (root) commitDocument({ ...document, root }); else message.info('已经是同级第一个');
+                      }}>上移</Button>
+                      <Button size="small" block onClick={() => {
+                        const root = moveSibling(document.root, selectedNode.id, 1);
+                        if (root) commitDocument({ ...document, root }); else message.info('已经是同级最后一个');
+                      }}>下移</Button>
+                    </Space.Compact>
+                  )}
                   <div className="node-meta"><Text type="secondary">节点 ID</Text><Text code copyable>{selectedNode.id}</Text></div>
+                  <div className="node-meta"><Text type="secondary">父节点</Text><Text code>{findParent(document.root, selectedNode.id)?.id ?? '（根）'}</Text></div>
                   <Button danger block size="small" onClick={deleteSelected}>删除组件</Button>
                 </div>
               </>

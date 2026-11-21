@@ -11,9 +11,10 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .project-name { font-size: 13px; font-weight: 600; color: #344054; }
 .save-state { font-size: 11px; color: #8c959f; }
 .save-state .anticon { color: #52c41a; margin-right: 4px; }
-.studio-workbench { min-height: 0; flex: 1; display: grid; grid-template-columns: 242px minmax(420px,1fr) 294px; gap: 10px; padding: 10px; }
-.left-panel, .right-panel, .center-panel { min-height: 0; background: #fff; border: 1px solid #e8edf3; border-radius: 10px; overflow: hidden; }
+.studio-workbench { min-height: 0; flex: 1; display: grid; grid-template-columns: 226px 196px minmax(380px,1fr) 294px; gap: 10px; padding: 10px; }
+.left-panel, .right-panel, .center-panel, .tree-panel { min-height: 0; background: #fff; border: 1px solid #e8edf3; border-radius: 10px; overflow: hidden; }
 .left-panel, .right-panel { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.tree-panel { padding: 14px 10px; display: flex; flex-direction: column; gap: 8px; overflow: auto; }
 .panel-heading { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 650; color: #303846; }
 .panel-count { margin-left: auto; font-size: 10px; color: #8993a1; border: 1px solid #e5eaf0; border-radius: 10px; padding: 1px 7px; font-weight: 500; }
 .component-groups { flex: 1; min-height: 0; overflow: auto; padding-right: 2px; }
@@ -60,10 +61,28 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .preview-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .built-preview-frame { width: 100%; height: calc(100vh - 190px); border: 1px solid #e8edf3; border-radius: 8px; background: #fff; }
 .unknown-node { padding: 12px; color: #cf1322; background: #fff1f0; border: 1px solid #ffa39e; }
-@media (max-width: 1120px) { .studio-workbench { grid-template-columns: 205px minmax(360px,1fr) 260px; gap: 7px; padding: 7px; } .studio-topbar { padding: 0 10px; } .topbar-center { display: none; } }
-@media (max-width: 820px) { .studio-workbench { grid-template-columns: 170px minmax(320px,1fr); } .right-panel { display: none; } .brand-subtitle { display: none; } .brand-lockup { min-width: 0; } }
+@media (max-width: 1120px) { .studio-workbench { grid-template-columns: 200px 170px minmax(340px,1fr) 260px; gap: 7px; padding: 7px; } .studio-topbar { padding: 0 10px; } .topbar-center { display: none; } }
+@media (max-width: 820px) { .studio-workbench { grid-template-columns: 170px minmax(320px,1fr); } .right-panel, .tree-panel { display: none; } .brand-subtitle { display: none; } .brand-lockup { min-width: 0; } }
 
 .canvas-node--drop-over { border-color: #1677ff !important; background: rgba(22,119,255,.06); box-shadow: inset 0 0 0 1px rgba(22,119,255,.16); }
 
 .theme-editor { display: flex; flex-direction: column; gap: 10px; padding-bottom: 4px; }
 .theme-editor .ant-input[type='color'] { width: 100%; height: 34px; padding: 3px 5px; cursor: pointer; }
+
+/* component tree panel */
+.component-tree { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow: auto; }
+.tree-row { display: flex; align-items: center; gap: 8px; padding: 3px 6px; border-radius: 5px; cursor: pointer; font-size: 11px; color: #4a5563; white-space: nowrap; }
+.tree-row:hover { background: #f5faff; }
+.tree-row--selected { background: #e6f4ff; color: #1677ff; font-weight: 600; }
+.tree-row--hidden { opacity: .45; font-style: italic; }
+.tree-row--text { color: #98a2b3; font-style: italic; cursor: default; }
+.tree-row--text:hover { background: transparent; }
+.tree-row__type { color: #8b95a1; font-size: 9px; flex: 0 0 auto; }
+.tree-row--selected .tree-row__type { color: #69b1ff; }
+.tree-row__label { overflow: hidden; text-overflow: ellipsis; }
+
+/* canvas node drag handle */
+.canvas-node__drag { position: absolute; top: 2px; left: -14px; z-index: 2; width: 14px; height: 20px; display: none; place-items: center; color: #1677ff; font-size: 11px; cursor: grab; background: #fff; border: 1px solid #91caff; border-radius: 4px; line-height: 12px; text-align: center; user-select: none; }
+.canvas-node:hover > .canvas-node__drag, .canvas-node--selected > .canvas-node__drag { display: grid; }
+.canvas-node__drag.is-dragging { opacity: .4; cursor: grabbing; }
+.canvas-node { overflow: visible; }

@@ -7,9 +7,11 @@
 | 组件库拖拽添加 | 已实现 | 可添加到根画布或 Flex / Card / ProCard 容器 |
 | 属性面板 | 部分实现 | 每个已接入组件只覆盖常用 API 子集 |
 | 页面主题 Token | 部分实现 | 当前提供主色和圆角两个编辑入口 |
-| Design IR | 已实现 MVP | 当前为树形结构 v1，尚无 slots / bindings / code nodes / source maps |
-| TSX 正向生成 | 已实现 | 标准静态组件 TSX，带 ConfigProvider Token |
-| TSX 反向同步 | 部分实现 | 只支持已注册组件静态 JSX 子集；动态表达式留在代码模式 |
+| Design IR | 已升级 v2 | 单文本通道（children 内 string）、meta 内部元数据、schemaVersion 迁移闸门（v1→v2 自动）、纯函数树操作 API（含 moveNode/moveSibling）、反向解析稳定节点 ID |
+| TSX 正向生成 | 已实现 | 标准静态组件 TSX，带 ConfigProvider Token；文本输出为 JSX 子内容 |
+| TSX 反向同步 | 部分实现 | 只支持已注册组件静态 JSX 子集；动态表达式留在代码模式；按位置复用旧节点 id |
+| 组件树面板 | 已实现 | 第四栏缩进树，点击联动画布选中；文本子节点可见 |
+| 画布内移动/排序 | 已实现 MVP | 拖拽手柄移动节点（容器=inside/叶子=同级）；上移/下移按钮；拒绝移入自身后代 |
 | 代码编辑 | 已实现 MVP | Monaco 编辑器，需手动触发解析同步 |
 | 单 TSX 导出 | 已实现 | 尚未生成完整业务项目 ZIP |
 | 独立构建预览 | 已实现 MVP | 本机 Vite build + **TypeScript 类型检查** + 静态服务 + iframe；固定依赖 |

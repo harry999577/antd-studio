@@ -1,7 +1,7 @@
 import type { DesignDocument } from './types';
 
 export const initialDocument: DesignDocument = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   framework: { react: '19.3.x', antd: '6.7.1', proComponents: '3.1.15-9' },
   theme: { token: { colorPrimary: '#1677ff', borderRadius: 8 } },
   root: {
@@ -9,7 +9,7 @@ export const initialDocument: DesignDocument = {
     type: 'Flex',
     props: { vertical: true, gap: 16, align: 'stretch' },
     children: [
-      { id: 'page-title', type: 'Typography.Title', props: { level: 3, children: '用户管理' }, children: [] },
+      { id: 'page-title', type: 'Typography.Title', props: { level: 3 }, children: ['用户管理'] },
       {
         id: 'search-card', type: 'Card', props: { title: '筛选条件', variant: 'outlined' },
         children: [
@@ -18,8 +18,8 @@ export const initialDocument: DesignDocument = {
             children: [
               { id: 'search-input', type: 'Input', props: { placeholder: '请输入用户名称或手机号', allowClear: true, style: { width: 260 } }, children: [] },
               { id: 'search-status', type: 'Select', props: { placeholder: '用户状态', allowClear: true, style: { width: 160 }, options: [{ label: '全部', value: 'all' }, { label: '启用', value: 'active' }, { label: '禁用', value: 'disabled' }] }, children: [] },
-              { id: 'search-submit', type: 'Button', props: { type: 'primary', children: '查询' }, children: [] },
-              { id: 'search-reset', type: 'Button', props: { children: '重置' }, children: [] },
+              { id: 'search-submit', type: 'Button', props: { type: 'primary' }, children: ['查询'] },
+              { id: 'search-reset', type: 'Button', props: {}, children: ['重置'] },
             ],
           },
         ],

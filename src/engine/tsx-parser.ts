@@ -1,6 +1,7 @@
 import { parse } from '@babel/parser';
 import type { ComponentType, DesignDocument, DesignNode, ChildNode } from './types';
 import { initialDocument } from './sample-document';
+import { IR_SCHEMA_VERSION } from './migrate';
 
 const supported = new Set<ComponentType>([
   'Flex', 'Card', 'Button', 'Input', 'Select', 'Divider', 'Typography.Title', 'ProCard', 'ProTable',
@@ -41,22 +42,38 @@ function expressionValue(node: any): unknown {
   throw new Error(`发现动态表达式 ${node.type}。请保留在代码模式，或先改成静态配置再同步画布。`);
 }
 
-function parseElement(element: any, index: number): DesignNode {
+/**
+ * Stable-id reuse: when code is re-parsed into the IR, a node keeps its previous
+ * id if the same path position holds the same component type. This preserves
+ * selection state and makes future source-map / incremental patch work possible.
+ */
+function reuseId(previous: DesignNode | undefined, type: ComponentType, path: number[]): string {
+  if (previous && previous.type === type) return previous.id;
+  return `code-node-${path.join('-')}-${crypto.randomUUID()}`;
+}
+
+function parseElement(element: any, path: number[], previous: DesignNode | undefined): DesignNode {
   const type = componentName(element.openingElement.name) as ComponentType;
   if (!supported.has(type)) throw new Error(`组件 ${type} 尚未加入可视化组件注册表；为避免丢失代码，本次未更新画布。`);
   const props: Record<string, unknown> = {};
   for (const attribute of element.openingElement.attributes) {
     if (attribute.type === 'JSXSpreadAttribute') throw new Error('发现 JSX spread 属性（...props），暂不自动转换；原代码不会被覆盖。');
     const key = attribute.name.name;
+    if (key === 'children') throw new Error('JSX 属性 children 是保留名，请改用 JSX 子内容；原代码不会被覆盖。');
     if (!attribute.value) props[key] = true;
     else if (attribute.value.type === 'StringLiteral') props[key] = attribute.value.value;
     else if (attribute.value.type === 'JSXExpressionContainer') props[key] = expressionValue(attribute.value.expression);
     else throw new Error(`属性 ${key} 暂不支持此写法`);
   }
   const children: ChildNode[] = [];
+  let elementIndex = 0;
+  // Match by position among element children only (string text children are skipped).
+  const prevNodeChildren = ((previous?.children ?? []).filter((child) => typeof child !== 'string') as DesignNode[]);
   for (const child of element.children) {
-    if (child.type === 'JSXElement') children.push(parseElement(child, children.length));
-    else if (child.type === 'JSXText') {
+    if (child.type === 'JSXElement') {
+      children.push(parseElement(child, [...path, elementIndex], prevNodeChildren[elementIndex]));
+      elementIndex += 1;
+    } else if (child.type === 'JSXText') {
       const text = child.value.replace(/\s+/g, ' ').trim();
       if (text) children.push(text);
     } else if (child.type === 'JSXExpressionContainer' && child.expression.type !== 'JSXEmptyExpression') {
@@ -65,7 +82,7 @@ function parseElement(element: any, index: number): DesignNode {
       else throw new Error('目前仅支持静态字符串/数字作为 JSX 文本内容');
     }
   }
-  return { id: `code-node-${index}-${crypto.randomUUID()}`, type, props, children };
+  return { id: reuseId(previous, type, path), type, props, children };
 }
 
 function findReturnJsx(declaration: any): any | undefined {
@@ -85,7 +102,7 @@ function findReturnJsx(declaration: any): any | undefined {
   return statements[0].argument;
 }
 
-export function parseTsxToDocument(source: string): DesignDocument {
+export function parseTsxToDocument(source: string, previous?: DesignDocument): DesignDocument {
   const ast = parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx'] });
   const program = ast.program as any;
   const topLevel = program.body as any[];
@@ -131,6 +148,6 @@ export function parseTsxToDocument(source: string): DesignDocument {
     theme = { token: token as Record<string, string | number> };
   }
 
-  const root = parseElement(pageElement, 0);
-  return { ...initialDocument, theme, root };
+  const root = parseElement(pageElement, [0], previous?.root);
+  return { schemaVersion: IR_SCHEMA_VERSION, framework: initialDocument.framework, theme, root };
 }

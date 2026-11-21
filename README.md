@@ -41,7 +41,7 @@ npm run dev
 3. 当前已接入 9 种官方组件：Flex、Card、Button、Input、Select、Divider、Typography.Title、ProCard、ProTable。
 4. 右侧属性编辑器接入了上述组件的一部分常用属性。JSON 属性编辑支持输入未完成 JSON 草稿。
 5. 页面主题可以编辑 `ConfigProvider` 的 `colorPrimary`、`borderRadius` Token。
-6. Design IR 驱动画布和 TSX 生成；属性修改会同步更新代码；提供撤销/重做。
+6. Design IR v2 驱动画布和 TSX 生成：文本统一存于 `children`，`meta` 为设计器内部元数据，`schemaVersion` 载入必经迁移（v1 自动升级）；属性修改会同步更新代码；提供撤销/重做；组件树面板与画布选中联动；支持节点移动与同级排序。规范见 `docs/DESIGN-IR.md`。
 7. Monaco TSX 编辑器；“解析并同步画布”支持静态 JSX 子集。解析失败时保留源代码，不覆盖 IR。
 8. 导出当前 TSX 文件。
 9. “构建预览”会把当前 TSX 放进独立临时项目，使用真实 Vite 执行生产构建，将静态产物放到 `4175` 服务，并在独立 iframe 中打开。构建失败会返回错误，而不会显示虚假的预览成功状态。

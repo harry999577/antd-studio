@@ -26,11 +26,12 @@ function renderChild(child: ChildNode, depth: number): string {
 function renderNode(node: DesignNode, depth: number): string {
   const indent = '  '.repeat(depth);
   const name = jsxName(node.type);
+  // IR v2: props never contain `children`; visible text is a string entry of node.children.
   const props = Object.entries(node.props)
     .filter(([key, value]) => key !== 'children' && value !== undefined)
     .map(([key, value]) => `${key}=${jsxAttribute(value)}`);
   const opening = props.length ? `<${name}\n${'  '.repeat(depth + 1)}${props.join(`\n${'  '.repeat(depth + 1)}`)}` : `<${name}`;
-  const children = [...(node.props.children !== undefined && node.children.length === 0 ? [String(node.props.children)] : []), ...node.children];
+  const children = node.children;
   if (!children.length) return `${indent}${opening} />`;
   return `${indent}${opening}>\n${children.map((child) => renderChild(child, depth + 1)).join('\n')}\n${indent}</${name}>`;
 }
