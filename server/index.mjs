@@ -1,10 +1,16 @@
 import express from 'express';
 import react from '@vitejs/plugin-react';
 import { build } from 'vite';
+import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm, writeFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+
+// Load TypeScript through CJS: the ESM wrapper of typescript@6 exposes a ts.sys
+// whose CompilerHost integration differs and breaks createProgram.
+const require = createRequire(import.meta.url);
+const ts = require('typescript');
 
 const app = express();
 const port = Number(process.env.PREVIEW_PORT || 4175);
@@ -13,6 +19,45 @@ const previewRoot = path.join(projectRoot, '.studio-previews');
 const workspacesRoot = path.join(previewRoot, 'workspaces');
 const distRoot = path.join(previewRoot, 'dist');
 const MAX_SOURCE_BYTES = 300 * 1024;
+
+// Type-check the generated project with the same compiler options as the designer
+// (moduleResolution Bundler, react-jsx, strict). Returns Vite-style diagnostic text.
+function typeCheckProject(workspace) {
+  const configSource = ts.readConfigFile(path.join(projectRoot, 'tsconfig.json'), ts.sys.readFile);
+  const parsed = ts.parseJsonConfigFileContent(configSource.config ?? {}, ts.sys, workspace);
+  const options = {
+    ...parsed.options,
+    noEmit: true,
+    // The preview workspace has no vite/client types; the page only needs React + antd.
+    types: ['react'],
+    skipLibCheck: true,
+  };
+  const fileNames = [
+    path.join(workspace, 'src', 'vite-env.d.ts'),
+    path.join(workspace, 'src', 'main.tsx'),
+    path.join(workspace, 'src', 'Page.tsx'),
+  ];
+  // createCompilerHost builds a full CompilerHost from ts.sys (TS 6 sys shape differs);
+  // then pin cwd so relative typeRoots resolve against the studio project.
+  const programHost = ts.createCompilerHost(options);
+  programHost.getCurrentDirectory = () => projectRoot;
+  const program = ts.createProgram(fileNames, options, programHost);
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+  if (!diagnostics.length) return null;
+  const formatHost = {
+    getCanonicalFileName: (f) => f,
+    useNewLine: ts.sys.newLine === '\r\n',
+    getNewLine: () => ts.sys.newLine,
+    getCurrentDirectory: () => projectRoot,
+  };
+  const lines = diagnostics.slice(0, 20).map((d) => {
+    const where = d.file && d.start !== undefined
+      ? `${path.relative(projectRoot, d.file.fileName)}:${(ts.getLineAndCharacterOfPosition(d.file, d.start).line) + 1}:${(ts.getLineAndCharacterOfPosition(d.file, d.start).character) + 1}`
+      : 'unknown';
+    return `TS${d.code} ${where}  ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`;
+  });
+  return lines.join('\n') + (diagnostics.length > 20 ? `\n… 其余 ${diagnostics.length - 20} 条省略` : '');
+}
 
 app.use(express.json({ limit: '400kb' }));
 
@@ -49,6 +94,8 @@ app.post('/api/build-preview', async (req, res) => {
 <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>`, 'utf8');
 
     await writeFile(path.join(workspace, 'src', 'Page.tsx'), source, 'utf8');
+    // Vite-style ambient declaration so `import 'x.css'` passes the type check.
+    await writeFile(path.join(workspace, 'src', 'vite-env.d.ts'), `declare module '*.css';\n`, 'utf8');
     await writeFile(path.join(workspace, 'src', 'main.tsx'), `import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ConfigProvider, App as AntApp } from 'antd';
@@ -63,6 +110,13 @@ createRoot(document.getElementById('root')!).render(
     </ConfigProvider>
   </React.StrictMode>,
 );`, 'utf8');
+
+    // Acceptance item: run the real TypeScript type check before bundling.
+    const typeErrors = typeCheckProject(workspace);
+    if (typeErrors) {
+      await rm(workspace, { recursive: true, force: true }).catch(() => undefined);
+      return res.status(422).json({ error: `TypeScript 类型检查失败：\n${typeErrors}`, stage: 'typecheck' });
+    }
 
     await build({
       configFile: false,
@@ -93,6 +147,7 @@ createRoot(document.getElementById('root')!).render(
 
     return res.json({ id, previewUrl: `/previews/${id}/index.html`, status: 'built' });
   } catch (error) {
+    console.error('[build-preview] failed:', error?.stack || error);
     await rm(workspace, { recursive: true, force: true }).catch(() => undefined);
     await rm(output, { recursive: true, force: true }).catch(() => undefined);
     const detail = error instanceof Error ? error.message : String(error);

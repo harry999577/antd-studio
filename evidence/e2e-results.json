@@ -1,0 +1,23 @@
+{
+ "A_real_ant_btn": 19,
+ "A_real_protable": 1,
+ "A_real_input": 4,
+ "A_canvas_nodes": 10,
+ "A_palette_items": 9,
+ "B_selected_node": 1,
+ "B_props_fields": 5,
+ "B_node_id": 1,
+ "C_canvas_updated": 1,
+ "C_code_updated": true,
+ "D_error_shown": true,
+ "D_source_preserved": true,
+ "D_canvas_untouched": 1,
+ "E_parse_success_toast": true,
+ "E_canvas_roundtrip": 1,
+ "E_old_doc_replaced": true,
+ "F_iframe_real_button": 1,
+ "F_iframe_roundtrip": 1,
+ "F_build_log": "构建成功 · 8311004dcb2f4448 重新构建",
+ "F_pass": true,
+ "page_errors": []
+}

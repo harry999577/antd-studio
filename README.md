@@ -14,7 +14,7 @@
 - Vite `8.3.8` + `@vitejs/plugin-react` `6.3.0`
 - dnd-kit `6.3.1`、Monaco Editor `0.57.0`、Babel Parser `7.29.14`（7.x 维护线）
 
-直接依赖全部精确锁定，不使用 `^` 或 `~`。当前尚未生成 `package-lock.json`（本次环境依赖安装超时）；首次成功安装后应提交 lockfile，并在 CI / 发布环境使用 `npm ci`，这样才能冻结传递依赖。升级时应先跑兼容性矩阵和生成页面回归测试，再修改版本。
+直接依赖全部精确锁定，不使用 `^` 或 `~`。`package-lock.json` 已生成并提交（2026-11-21 Windows 实测安装通过），CI / 发布环境请使用 `npm ci` 冻结传递依赖。升级时应先跑兼容性矩阵和生成页面回归测试，再修改版本。
 
 ## Windows 本地启动
 
@@ -71,7 +71,7 @@ Ant Design 6 的部分 API 与旧版本不同，例如 Card 使用 `variant`，�
 - **独立构建预览**：点击构建，调用本地 Vite build，加载静态产物；这是当前 MVP 已实现的新增能力。
 - **正式交付预览**：完整项目导出、路由/资源/API mock、环境配置与部署验证，属于下一阶段。
 
-当前构建器使用固定依赖版本，不支持页面自行安装任意 npm 包，也不提供任意多文件工程的完整构建。`vite build` 负责 TSX 转换和打包，不应误认为已完成全量 TypeScript 类型检查或后端 API 集成。
+当前构建器使用固定依赖版本，不支持页面自行安装任意 npm 包，也不提供任意多文件工程的完整构建。构建预览流程为：源码校验 → 独立 workspace → **TypeScript 类型检查（tsc 编译器 API，真实诊断）** → `vite build` → 静态产物；任一阶段失败都会以 422 + 真实错误信息返回，不会伪报成功。
 
 **安全边界：**本地 MVP 的构建服务只绑定 `127.0.0.1`，适合单机开发验证，不可直接作为多用户生产服务。生产必须升级为独立 Worker/一次性容器或 microVM，实施 CPU/内存/时间/磁盘配额、无凭据环境、依赖白名单、网络出口策略、任务队列、产物 TTL 和审计。
 
@@ -81,7 +81,7 @@ Ant Design 6 的部分 API 与旧版本不同，例如 Card 使用 `variant`，�
 2. 用元数据自动生成属性面板；对复杂类型实现字段树、插槽、事件、函数代码编辑器。
 3. 补充组件树、画布节点拖动排序、插槽编辑、响应式断点和更完整的主题 Token。
 4. 引入 AST 节点 source map、增量源码 Patch 和冲突解决，支持静态节点与 Code Node 混合编辑。
-5. 为构建任务增加 TypeScript 类型检查、日志面板、错误定位、产物版本管理和取消任务。
+5. ~~为构建任务增加 TypeScript 类型检查~~（已完成，2026-11-21）；继续补日志面板、错误定位、产物版本管理和取消任务。
 6. 实现完整项目导出：package manifest、lockfile 策略、tsconfig、Vite 配置、路由、主题、services、mock 数据。
 7. 建立 React / Ant Design / ProComponents 版本兼容矩阵。ProComponents 3.1.15-9 当前按预发布版本锁定，不应在未回归验证前静默升级。
 
@@ -91,5 +91,13 @@ Ant Design 6 的部分 API 与旧版本不同，例如 Card 使用 `variant`，�
 npm run typecheck
 npm run build
 ```
+
+## 项目档案
+
+- `docs/AUDIT-REPORT.md` — 第一轮工程审计报告（源码名实核查、依赖兼容性、验收证据、遗留问题 R-1..R-10）。
+- `docs/ARCHITECTURE.md` — 技术架构与验收边界。
+- `docs/IMPLEMENTATION-STATUS.md` — 能力矩阵与本轮实测结论。
+- `docs/WINDOWS-SETUP.md` — Windows 安装、运行、测试与已知环境坑。
+- `tests/` — 引擎确定性测试与 Playwright E2E 脚本；`evidence/` — 构建日志、E2E 结果 JSON 与运行截图。
 
 当前源码包不包含 `node_modules`。首次运行需要在可访问 npm registry 的环境执行 `npm install`。

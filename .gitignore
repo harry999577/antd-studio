@@ -1,8 +1,14 @@
 node_modules/
 dist/
 .studio-previews/
+tests/.test-dist/
+dev-output.txt
+dev-error.txt
+server-output.txt
+server-error.txt
 .env
 .env.*
 !.env.example
 *.log
+!evidence/build.log
 .DS_Store
