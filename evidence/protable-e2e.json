@@ -1,0 +1,29 @@
+{
+ "1_protable_selected": 1,
+ "1_props_panel": "ProTable",
+ "2_columns_editor_present": true,
+ "2_canvas_headers": [
+  "用户名称",
+  "手机号",
+  "状态",
+  "邮箱"
+ ],
+ "2_email_column_added": true,
+ "3_search_form_visible": 1,
+ "4_toolbar_visible": 1,
+ "5_pagination_editor_present": true,
+ "5_pagination_text": "第 1-2 条/总共 3 条 1 2 2 条/页",
+ "5_pagination_active": true,
+ "6_code_has_email": true,
+ "6_code_has_search_on": true,
+ "6_code_has_pagination": true,
+ "6_code_has_options_on": true,
+ "6_code_no_invalid_true": true,
+ "7_iframe_toolbar": 1,
+ "7_iframe_search": 1,
+ "7_iframe_email_header": 1,
+ "7_iframe_pagination": 1,
+ "7_iframe_page2_rows": 1,
+ "7_build_log": "构建成功 · 6ecadd9eefc24766 重新构建",
+ "page_errors": []
+}

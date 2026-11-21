@@ -19,7 +19,8 @@ import { componentGroups, componentRegistry, createNode } from './engine/registr
 import { generateTsx } from './engine/codegen';
 import { parseTsxToDocument } from './engine/tsx-parser';
 import { initialDocument } from './engine/sample-document';
-import { findNode, findParent, patchNode, removeNode, appendChild, moveNode, moveSibling, nodeText, setNodeText } from './engine/tree-ops';
+import { findNode, findParent, patchNode, removeNode, appendChild, moveNode, moveSibling, nodeText, setNodeText, getNodePath } from './engine/tree-ops';
+import { patchByPath, insertInto, removeFrom, patchTheme, moveInSource, type InsertableNode } from './engine/source-patch';
 import type { ComponentType, DesignDocument, DesignNode } from './engine/types';
 
 const { Text } = Typography;
@@ -47,8 +48,8 @@ export default function Studio() {
   const [buildLog, setBuildLog] = useState<string>('等待构建');
   const [componentQuery, setComponentQuery] = useState('');
   const [jsonDrafts, setJsonDrafts] = useState<Record<string, string>>({});
-  const [history, setHistory] = useState<DesignDocument[]>([]);
-  const [future, setFuture] = useState<DesignDocument[]>([]);
+  const [history, setHistory] = useState<{ document: DesignDocument; code: string }[]>([]);
+  const [future, setFuture] = useState<{ document: DesignDocument; code: string }[]>([]);
 
   const selectedNode = useMemo(
     () => selectedId ? findNode(document.root, selectedId) ?? null : null,
@@ -62,22 +63,54 @@ export default function Studio() {
     return false;
   };
 
-  const commitDocument = (next: DesignDocument) => {
-    setHistory((items) => [...items.slice(-39), document]);
+  /**
+   * Commit an IR change. When the editor has no unsynced user code we update the
+   * TSX incrementally through the Recast source-patch engine, so only the
+   * affected lines change and comments / formatting / non-visual code survive.
+   * Refusals (dynamic node, unlocatable) fall back to full regeneration with an
+   * info toast — nothing is silently dropped.
+   */
+  type CodePatch =
+    | { kind: 'prop'; path: number[]; attrs?: Record<string, unknown | undefined>; text?: string | null }
+    | { kind: 'insert'; parentPath: number[]; node: InsertableNode }
+    | { kind: 'remove'; path: number[] }
+    | { kind: 'theme'; token: Record<string, string | number> }
+    | { kind: 'move'; from: number[]; to: number[] };
+
+  const commitDocument = (next: DesignDocument, patch?: CodePatch) => {
+    setHistory((items) => [...items.slice(-39), { document, code }]);
     setFuture([]);
     setDocument(next);
-    setCode(generateTsx(next));
+    let nextCode = generateTsx(next);
+    if (!codeDirty) {
+      let res: { code: string; refused?: string; changed?: boolean } | null = null;
+      if (patch?.kind === 'prop') res = patchByPath(code, patch.path, { attrs: patch.attrs, text: patch.text });
+      else if (patch?.kind === 'insert') res = insertInto(code, patch.parentPath, patch.node);
+      else if (patch?.kind === 'remove') res = removeFrom(code, patch.path);
+      else if (patch?.kind === 'theme') res = patchTheme(code, patch.token);
+      else if (patch?.kind === 'move') res = moveInSource(code, patch.from, patch.to);
+      if (res) {
+        if (res.refused) {
+          if (res.refused === 'dynamic-node') message.info('该节点含动态代码（如事件函数），源码已原样保留，本次仅更新画布。');
+          else message.info('源码增量更新不可用，已回退为全量重新生成。');
+        } else {
+          nextCode = res.code;
+        }
+      }
+    }
+    setCode(nextCode);
     setCodeDirty(false);
     setCodeError(null);
   };
 
   const updateProp = (name: string, value: unknown) => {
     if (!ensureDesignEditable() || !selectedId) return;
+    const path = getNodePath(document.root, selectedId);
     const next = {
       ...document,
       root: patchNode(document.root, selectedId, (node) => ({ ...node, props: { ...node.props, [name]: value } })),
     };
-    commitDocument(next);
+    commitDocument(next, path ? { kind: 'prop', path, attrs: { [name]: value === undefined || value === '' ? undefined : value } } : undefined);
   };
 
   const addComponent = (type: ComponentType, targetId?: string) => {
@@ -86,7 +119,13 @@ export default function Studio() {
     const root = targetId
       ? appendChild(document.root, targetId, node)
       : { ...document.root, children: [...document.root.children, node] };
-    commitDocument({ ...document, root });
+    const parentPath = targetId ? getNodePath(document.root, targetId) : [];
+    commitDocument(
+      { ...document, root },
+      parentPath !== null && parentPath !== undefined
+        ? { kind: 'insert', parentPath: parentPath ?? [], node: { type: node.type, props: node.props, children: node.children } }
+        : undefined,
+    );
     setSelectedId(node.id);
   };
 
@@ -105,8 +144,17 @@ export default function Studio() {
         position: canReceive ? 'inside' : 'before',
         canReceive: (t) => componentRegistry[t].canHaveChildren,
       });
-      if (root) commitDocument({ ...document, root });
-      else message.warning('不能把容器移动到它自己的子节点内部。');
+      if (!root) { message.warning('不能把容器移动到它自己的子节点内部。'); return; }
+      // Sibling reorder keeps source formatting via a swap patch; cross-container
+      // moves fall back to regeneration (still lossless, just re-prints the tree).
+      const fromPath = getNodePath(document.root, draggedNodeId);
+      const toPath = findNode(root, draggedNodeId) ? getNodePath(root, draggedNodeId!) : null;
+      const isSiblingSwap = fromPath && toPath
+        && fromPath.length === toPath.length
+        && fromPath.slice(0, -1).join(',') === toPath.slice(0, -1).join(',')
+        && Math.abs(fromPath[fromPath.length - 1] - toPath[toPath.length - 1]) === 1;
+      if (isSiblingSwap) commitDocument({ ...document, root }, { kind: 'move', from: fromPath!, to: toPath! });
+      else commitDocument({ ...document, root });
       return;
     }
     if (!type) return;
@@ -117,7 +165,13 @@ export default function Studio() {
   const applyCode = () => {
     try {
       const next = parseTsxToDocument(code, document);
-      commitDocument(next);
+      setHistory((items) => [...items.slice(-39), { document, code }]);
+      setFuture([]);
+      setDocument(next);
+      // The parsed source stays authoritative: keep the user's own formatting,
+      // comments and non-visual code instead of regenerating over it.
+      setCodeDirty(false);
+      setCodeError(null);
       setSelectedId(next.root.id);
       message.success('TSX 已解析并同步到设计画布');
     } catch (error) {
@@ -135,7 +189,7 @@ export default function Studio() {
       const response = await fetch('/api/build-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: codeDirty ? code : generatedCode, theme: codeDirty ? {} : document.theme.token }),
+        body: JSON.stringify({ source: code, theme: document.theme.token }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || '构建失败');
@@ -170,24 +224,25 @@ export default function Studio() {
     if (!history.length) return;
     const previous = history[history.length - 1];
     setHistory((items) => items.slice(0, -1));
-    setFuture((items) => [document, ...items]);
-    setDocument(previous);
-    setCode(generateTsx(previous));
+    setFuture((items) => [{ document, code }, ...items]);
+    setDocument(previous.document);
+    setCode(previous.code);
     setCodeDirty(false);
   };
   const redo = () => {
     if (!future.length) return;
     const next = future[0];
     setFuture((items) => items.slice(1));
-    setHistory((items) => [...items, document]);
-    setDocument(next);
-    setCode(generateTsx(next));
+    setHistory((items) => [...items, { document, code }]);
+    setDocument(next.document);
+    setCode(next.code);
     setCodeDirty(false);
   };
 
   const deleteSelected = () => {
     if (!ensureDesignEditable() || !selectedId || selectedId === document.root.id) return;
-    commitDocument({ ...document, root: removeNode(document.root, selectedId) });
+    const path = getNodePath(document.root, selectedId);
+    commitDocument({ ...document, root: removeNode(document.root, selectedId) }, path ? { kind: 'remove', path } : undefined);
     setSelectedId(null);
   };
 
@@ -348,8 +403,9 @@ export default function Studio() {
                       <div className="prop-label"><span>显示文案</span><Text type="secondary" code>children</Text></div>
                       <Input size="small" value={nodeText(selectedNode)} onChange={(event) => {
                         if (!selectedId) return;
+                        const path = getNodePath(document.root, selectedId);
                         const next = { ...document, root: patchNode(document.root, selectedId, (node) => setNodeText(node, event.target.value)) };
-                        commitDocument(next);
+                        commitDocument(next, path ? { kind: 'prop', path, text: event.target.value || null } : undefined);
                       }} />
                     </div>
                   )}
@@ -358,11 +414,17 @@ export default function Studio() {
                     <Space.Compact block style={{ marginBottom: 8 }}>
                       <Button size="small" block onClick={() => {
                         const root = moveSibling(document.root, selectedNode.id, -1);
-                        if (root) commitDocument({ ...document, root }); else message.info('已经是同级第一个');
+                        if (!root) { message.info('已经是同级第一个'); return; }
+                        const from = getNodePath(document.root, selectedNode.id)!;
+                        const to = [...from.slice(0, -1), from[from.length - 1] - 1];
+                        commitDocument({ ...document, root }, { kind: 'move', from, to });
                       }}>上移</Button>
                       <Button size="small" block onClick={() => {
                         const root = moveSibling(document.root, selectedNode.id, 1);
-                        if (root) commitDocument({ ...document, root }); else message.info('已经是同级最后一个');
+                        if (!root) { message.info('已经是同级最后一个'); return; }
+                        const from = getNodePath(document.root, selectedNode.id)!;
+                        const to = [...from.slice(0, -1), from[from.length - 1] + 1];
+                        commitDocument({ ...document, root }, { kind: 'move', from, to });
                       }}>下移</Button>
                     </Space.Compact>
                   )}
@@ -385,7 +447,8 @@ export default function Studio() {
                   value={String(document.theme.token.colorPrimary ?? '#1677ff')}
                   onChange={(event) => {
                     if (!ensureDesignEditable()) return;
-                    commitDocument({ ...document, theme: { token: { ...document.theme.token, colorPrimary: event.target.value } } });
+                    const token = { ...document.theme.token, colorPrimary: event.target.value };
+                    commitDocument({ ...document, theme: { token } }, { kind: 'theme', token });
                   }}
                 />
               </div>
@@ -399,7 +462,8 @@ export default function Studio() {
                   value={Number(document.theme.token.borderRadius ?? 8)}
                   onChange={(value) => {
                     if (!ensureDesignEditable() || value === null) return;
-                    commitDocument({ ...document, theme: { token: { ...document.theme.token, borderRadius: value } } });
+                    const token = { ...document.theme.token, borderRadius: value };
+                    commitDocument({ ...document, theme: { token } }, { kind: 'theme', token });
                   }}
                 />
               </div>

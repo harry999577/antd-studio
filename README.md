@@ -55,7 +55,7 @@ Ant Design 6 的部分 API 与旧版本不同，例如 Card 使用 `variant`，�
 
 ## 双向同步边界
 
-当前反向解析只支持：
+**代码 → 画布（解析）方向**只支持静态子集：
 
 - 仅含 `antd` / `@ant-design/pro-components` 官方包 import 和一个 `export default`；
 - 不带参数、非 async 的函数/箭头函数组件；函数体只有一条直接返回的 JSXElement；
@@ -64,6 +64,8 @@ Ant Design 6 的部分 API 与旧版本不同，例如 Card 使用 `variant`，�
 - 由代码生成器输出的静态 `ConfigProvider theme.token` 包裹。
 
 暂不支持任意代码完整还原：额外模块导入、顶层变量/导出、`map`、条件渲染、Hooks、闭包回调、JSX spread、动态变量、render 函数、自定义组件、Fragment、组件参数、多重 return 等。此类代码可以留在代码模式并尝试构建预览，但不能要求它自动变成拖拽节点。遇到不支持语法时，解析器会报错，且不会覆盖原始代码。
+
+**画布 → 代码（编辑）方向**为 Recast 增量 patch（2026-11-21 轮次3）：属性/文本/主题/同级排序只改写目标 JSX 节点的源码行，上述"不支持还原"的代码（注释、变量、hooks、自定义组件、事件函数）在源码中**字节保留**；若目标节点本身含动态代码，patch 被拒绝并提示，绝不静默破坏。技术方案见 `docs/RECAST-TECHNICAL-PLAN.md`，前后 diff 演示见 `evidence/sync-demo.md`。
 
 ## 构建预览：三层概念
 
@@ -79,25 +81,38 @@ Ant Design 6 的部分 API 与旧版本不同，例如 Card 使用 `variant`，�
 
 1. 实现版本感知的官方 API 元数据采集器，先打通 Ant Design CLI / 类型声明，再单独接 ProComponents 适配。
 2. 用元数据自动生成属性面板；对复杂类型实现字段树、插槽、事件、函数代码编辑器。
-3. 补充组件树、画布节点拖动排序、插槽编辑、响应式断点和更完整的主题 Token。
-4. 引入 AST 节点 source map、增量源码 Patch 和冲突解决，支持静态节点与 Code Node 混合编辑。
+3. 补充组件树折叠/多选、画布精确插入位置指示、响应式断点和更完整的主题 Token。
+4. ~~引入 AST 节点 source map、增量源码 Patch 和冲突解决~~（已完成，2026-11-21 轮次3，`docs/RECAST-TECHNICAL-PLAN.md`）；继续做 Code Node 混合编辑（动态节点目前只读保护）。
 5. ~~为构建任务增加 TypeScript 类型检查~~（已完成，2026-11-21）；继续补日志面板、错误定位、产物版本管理和取消任务。
 6. 实现完整项目导出：package manifest、lockfile 策略、tsconfig、Vite 配置、路由、主题、services、mock 数据。
 7. 建立 React / Ant Design / ProComponents 版本兼容矩阵。ProComponents 3.1.15-9 当前按预发布版本锁定，不应在未回归验证前静默升级。
+8. 设计文档持久化保存（localStorage → 后端 API）；当前刷新即丢，见 `docs/KNOWN-ISSUES.md` KI-005。
 
 ## 检查命令
 
 ```powershell
 npm run typecheck
 npm run build
+npm test              # typecheck + 引擎/patch 断言（35 + 28）
+npm run test:demo     # 双向同步演示 -> evidence/sync-demo.md
+npm run test:e2e      # Playwright 全流程（需 npm run dev 在跑）
+py tests/protable.e2e.py   # ProTable 列/搜索/分页/工具栏端到端
+npm audit             # found 0 vulnerabilities
 ```
 
 ## 项目档案
 
-- `docs/AUDIT-REPORT.md` — 第一轮工程审计报告（源码名实核查、依赖兼容性、验收证据、遗留问题 R-1..R-10）。
+- `docs/AUDIT-REPORT.md` — 工程审计报告（源码名实核查、依赖兼容性、验收证据、遗留问题 R-1..R-10 与修复状态）。
 - `docs/ARCHITECTURE.md` — 技术架构与验收边界。
-- `docs/IMPLEMENTATION-STATUS.md` — 能力矩阵与本轮实测结论。
+- `docs/DESIGN-IR.md` — Design IR v2 规范（单文本通道、meta、迁移闸门、双向同步合同）。
+- `docs/COMPONENT-REGISTRY.md` — 组件注册与属性元数据规范。
+- `docs/RECAST-TECHNICAL-PLAN.md` — Babel Parser + Recast 增量源码 patch 技术方案（AST、sourceMap、Patch、冲突策略）。
+- `docs/SECURITY-AUDIT.md` — npm audit 漏洞分析与修复评估（critical/low 归零）。
+- `docs/TASK-001.md` — 本轮任务档案（整改项、验收对照、文件清单）。
+- `docs/KNOWN-ISSUES.md` — 运行期已知问题登记（KI-001..014）。
+- `docs/IMPLEMENTATION-STATUS.md` — 能力矩阵与各轮实测结论。
+- `docs/DEVELOPMENT-LOG.md` — 开发过程记录（轮次 1-3）。
 - `docs/WINDOWS-SETUP.md` — Windows 安装、运行、测试与已知环境坑。
-- `tests/` — 引擎确定性测试与 Playwright E2E 脚本；`evidence/` — 构建日志、E2E 结果 JSON 与运行截图。
+- `tests/` — 引擎/patch 确定性测试、双向同步演示、Playwright E2E 脚本；`evidence/` — 构建日志、audit 数据、diff 演示、E2E 结果 JSON 与运行截图。
 
 当前源码包不包含 `node_modules`。首次运行需要在可访问 npm registry 的环境执行 `npm install`。

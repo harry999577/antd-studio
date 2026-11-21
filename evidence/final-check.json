@@ -1,0 +1,9 @@
+{
+ "smoke_bool_flags_all_true": true,
+ "smoke_F_pass": true,
+ "smoke_page_errors": 0,
+ "protable_bool_flags_all_true": true,
+ "protable_counts_all_positive": true,
+ "protable_page_errors": 0,
+ "protable_build_log": "构建成功 · 6ecadd9eefc24766 重新构建"
+}

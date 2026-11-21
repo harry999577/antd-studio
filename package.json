@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test:engine": "rolldown tests/engine-roundtrip.test.ts --format esm --file tests/.test-dist/engine-roundtrip.mjs --platform node && node tests/.test-dist/engine-roundtrip.mjs",
+    "test:engine": "rolldown tests/engine-roundtrip.test.ts --format esm --file tests/.test-dist/engine-roundtrip.mjs --platform node && node tests/.test-dist/engine-roundtrip.mjs && rolldown tests/source-patch.test.ts --format esm --file tests/.test-dist/source-patch.mjs --platform node && node tests/.test-dist/source-patch.mjs",
+    "test:demo": "rolldown tests/sync-demo.ts --format esm --file tests/.test-dist/sync-demo.mjs --platform node && node tests/.test-dist/sync-demo.mjs",
     "test:e2e": "py tests/smoke.e2e.py",
     "test": "npm run typecheck && npm run test:engine"
   },
@@ -25,7 +26,8 @@
     "express": "5.2.1",
     "monaco-editor": "0.57.0",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "recast": "0.24.3"
   },
   "devDependencies": {
     "@types/express": "5.0.3",
@@ -33,11 +35,14 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.3.0",
-    "concurrently": "9.2.1",
+    "concurrently": "9.2.5",
     "typescript": "6.0.2",
     "vite": "8.3.8"
   },
   "engines": {
     "node": ">=22.12.0"
+  },
+  "overrides": {
+    "dompurify": "3.4.18"
   }
 }

@@ -1,4 +1,5 @@
 import type { ChildNode, ComponentType, DesignDocument, DesignNode } from './types';
+import { normalizeProTableProp } from './registry';
 
 const importNames: Record<ComponentType, string> = {
   Flex: 'Flex', Card: 'Card', Button: 'Button', Input: 'Input', Select: 'Select', Divider: 'Divider',
@@ -29,7 +30,7 @@ function renderNode(node: DesignNode, depth: number): string {
   // IR v2: props never contain `children`; visible text is a string entry of node.children.
   const props = Object.entries(node.props)
     .filter(([key, value]) => key !== 'children' && value !== undefined)
-    .map(([key, value]) => `${key}=${jsxAttribute(value)}`);
+    .map(([key, value]) => `${key}=${jsxAttribute(node.type === 'ProTable' ? normalizeProTableProp(key, value) : value)}`);
   const opening = props.length ? `<${name}\n${'  '.repeat(depth + 1)}${props.join(`\n${'  '.repeat(depth + 1)}`)}` : `<${name}`;
   const children = node.children;
   if (!children.length) return `${indent}${opening} />`;

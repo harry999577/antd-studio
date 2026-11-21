@@ -92,6 +92,21 @@ check('tree.sibling_edge_null', moveSibling(root, 'page-title', -1) === null);
 const setText = setNodeText(btn, '新文案');
 check('tree.set_text', nodeText(setText) === '新文案' && setText.children.length === 1);
 
+// ---------- text channel ops ----------
+// ProTable boolean-valued config props (search/options) must normalize true -> {} in TSX
+// because the official type is `false | Config` (true is not assignable).
+const ptEdited = JSON.parse(JSON.stringify(initialDocument));
+function setPt(node: any) {
+  if (node.id === 'user-table') { node.props.search = true; node.props.options = true; }
+  node.children?.forEach((c: any) => { if (typeof c !== 'string') setPt(c); });
+}
+setPt(ptEdited.root);
+const ptCode = generateTsx(ptEdited);
+check('protable.search_true_normalized', ptCode.includes('search={{}}') && !ptCode.includes('search={true}'), ptCode.match(/search=\{[^}]*\}/)?.[0]);
+check('protable.options_true_normalized', ptCode.includes('options={{}}') && !ptCode.includes('options={true}'));
+const ptBack = parseTsxToDocument(ptCode);
+check('protable.roundtrip_parses', ptBack.root.children.length === initialDocument.root.children.length);
+
 console.log('ENGINE_RESULTS ' + JSON.stringify(results, null, 2));
 const failed = Object.entries(results).filter(([, v]) => !(v as any).pass);
 if (failed.length) { console.error('ENGINE_FAILED: ' + failed.map(f => f[0]).join(', ')); process.exit(1); }

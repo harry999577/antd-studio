@@ -1,5 +1,17 @@
 import type { ComponentDefinition, ComponentType, DesignNode } from './types';
 
+/**
+ * ProTable boolean-valued props whose official type is `false | Config`
+ * (no `true` member): the IR keeps boolean semantics for the switch editor,
+ * and codegen / source-patch normalize `true` to `{}` on output.
+ */
+export const PRO_TABLE_CONFIG_BOOL_PROPS = new Set(['search', 'options', 'sticky', 'ghost']);
+
+export function normalizeProTableProp(name: string, value: unknown): unknown {
+  if (PRO_TABLE_CONFIG_BOOL_PROPS.has(name) && value === true) return {};
+  return value;
+}
+
 const buttonTypes = [
   { label: '主按钮', value: 'primary' },
   { label: '默认按钮', value: 'default' },

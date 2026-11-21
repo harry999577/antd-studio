@@ -60,11 +60,11 @@ npm run build        # tsc + vite build → 退出码 0，3710 模块（见 evid
 
 冒烟测试（需先 `npm run dev` 保持运行）：
 ```powershell
-npm test                    # typecheck + 引擎确定性测试（期望 ENGINE_ALL_PASS (32 checks)）
-npm run test:e2e            # Playwright E2E（需 python + playwright，见下）；期望 evidence\e2e-results.json 全部为真值，F_pass=true
-
-# 单独跑引擎测试：
-npm run test:engine
+npm test                    # typecheck + 引擎确定性测试（期望 ENGINE_ALL_PASS (35) + PATCH_ALL_PASS (28)）
+npm run test:e2e            # Playwright 全流程 E2E；期望 evidence\e2e-results.json 全部为真值，F_pass=true
+npm run test:demo           # 双向同步演示 -> evidence\sync-demo.md（期望 DEMO_OK）
+py tests\protable.e2e.py    # ProTable 列/搜索/工具栏/分页端到端 -> evidence\protable-e2e.json 全项通过
+npm audit                   # 期望 found 0 vulnerabilities（修复过程见 docs/SECURITY-AUDIT.md）
 ```
 
 ## 5. 构建预览使用说明

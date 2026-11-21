@@ -109,6 +109,20 @@ export function moveSibling(root: DesignNode, id: string, delta: number): Design
   return patchNode(root, parent.id, (n) => ({ ...n, children }));
 }
 
+/** Path of element-child indices from root to node `id` (string children skipped).
+ *  Mirrors source-patch.ts indexing so an IR node maps 1:1 onto its AST node. */
+export function getNodePath(root: DesignNode, id: string): number[] | null {
+  if (root.id === id) return [];
+  let idx = 0;
+  for (const child of root.children) {
+    if (typeof child === 'string') continue;
+    const sub = getNodePath(child, id);
+    if (sub) return [idx, ...sub];
+    idx += 1;
+  }
+  return null;
+}
+
 /** Text of a leaf node = its first string child (IR v2 single text channel). */
 export function nodeText(node: DesignNode): string {
   const first = node.children.find((child) => typeof child === 'string');

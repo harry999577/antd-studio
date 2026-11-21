@@ -35,10 +35,32 @@
 
 **验证**：typecheck 零错误；`npm run build` 退出码 0；引擎 32/32；E2E 全绿（含构建预览 iframe 真实渲染）；控制台 0 error。
 
+## 轮次 3 — 核心双向同步与关键链路验收补齐（2026-11-21 下午，TASK-001）
+
+**做了什么**
+1. **Recast 增量源码 patch 引擎**（`src/engine/source-patch.ts`，新）：
+   - `indexSource()`：recast + babel-ts 解析，产出带 `loc`（sourceMap）与稳定 id（位置+类型复用）的 JSX 索引树；自动解包 ConfigProvider。
+   - `patchByPath/patchSource`（属性/文本）、`moveInSource`（同级交换）、`patchTheme`（token 就地改）、`insertInto`+`designNodeToAst`（结构插入）、`removeFrom`（结构删除）。
+   - 冲突策略：动态节点/解析失败/找不到节点 → **拒绝并保留源码字节**，原因上报 UI（不静默丢弃）。
+   - 踩坑修复：① recast 未指定 `lineTerminator` 时 Windows 下整文件变 \r\n → 全量假 diff；② `patchTheme` 整体替换表达式导致子树重缩进 → 改为定位 token ObjectExpression 仅改属性值；③ ProTable `search/options` 官方类型 `false|Config`，`true` 非法 → 输出边界 `normalizeProTableProp` true→{}。
+2. **Studio 集成**：`commitDocument(next, patch?)` 按类型走增量 patch；撤销/重做栈升级为 `{document, code}` 快照对；`applyCode` 解析成功后保留用户源码为权威不再重生成覆盖。
+3. **Monaco 离线化**（KI-010）：`loader.config({monaco})` + Vite `?worker` 本地 worker（0.57 exports 映射路径 `monaco-editor/<sub>.js`），清除对 jsdelivr CDN 的依赖（曾致代码 Tab 卡 Loading、E2E 超时）。
+4. **测试**：
+   - `tests/source-patch.test.ts`（新）：28 断言（索引/稳定 id/局部 patch 单行 diff/注释保留/动态拒绝/未知 id 拒绝/坏源码拒绝/patch 后 id 稳定）。
+   - `tests/sync-demo.ts`（新）→ `evidence/sync-demo.md`：6 场景真实前后 diff（属性/文本/交换/主题/动态拒绝/双向）。
+   - `tests/protable.e2e.py`（新）→ `evidence/protable-e2e.json` + 5 截图：列 JSON 编辑（+邮箱列）、search 开关、options 工具栏、pagination pageSize=2、代码同步、真实独立构建 iframe 内翻页验证。
+   - `npm run test:engine` 聚合引擎+patch 套件；`npm run test:demo` 独立。
+5. **安全治理**（KI-011）：`concurrently→9.2.5` 修 shell-quote critical；`overrides.dompurify→3.4.18` 修 DOMPurify low（降级 monaco 无效——0.55.1 也锁漏洞版）。`npm audit` 4→**0**。报告 `docs/SECURITY-AUDIT.md`。
+6. **档案补齐**：`docs/TASK-001.md`（任务书+验收对照+文件清单）、`docs/KNOWN-ISSUES.md`（KI-001..014 运行期缺陷登记）、`docs/RECAST-TECHNICAL-PLAN.md`（AST/sourceMap/Patch/冲突策略）。
+7. **历史矛盾修正**：AUDIT-REPORT 的 AST 行由"⚠️部分"升级为"✅ 已落地（轮次3）"；IMPLEMENTATION-STATUS 反向同步行更新为增量 patch 语义；轮次 1 文档中"引擎 15 项断言"统一为当前 35+28。
+
+**验证**：typecheck 零错误；build 退出码 0；ENGINE 35/35 + PATCH 28/28 + DEMO_OK；smoke.e2e 全绿；protable.e2e 全绿；npm audit 0 漏洞；Monaco 0 外部请求。
+
 ## 遗留与下一步（按优先级）
 
-1. **R-1/R-3 Recast 增量源码 patch**：稳定 ID 已就位，下一步把"全量重建 IR"升级为保留格式与 sourceMap 的源码 patch（目标约束 Babel Parser + Recast 的完整落实）。
-2. **R-2 元数据自动采集**：从 antd `.d.ts` 生成 ComponentMeta，先覆盖 Form/Table/Modal。
-3. **slot/event/code 编辑器实现**（接口已预留）。
-4. **R-9 持久化**：文档保存（localStorage → 后端）+ 撤销栈覆盖代码编辑。
-5. R-7 ProComponents RC 版本回归矩阵；R-8 npm audit 评估。
+1. ~~**R-1/R-3 Recast 增量源码 patch**~~ **已完成**（轮次 3，见上）。剩余：节点级双向高亮 UI、Code Node 混合编辑（动态节点目前只读保护）。
+2. **R-2 元数据自动采集**：从 antd `.d.ts` 生成 ComponentMeta，先覆盖 Form/Table/Modal（下一轮最高优先级）。
+3. **slot/event/code 编辑器实现**（接口已在 PropDefinition.editor 预留）。
+4. **R-9 持久化**：文档保存（localStorage → 后端）+ 撤销栈内存优化（KI-004）。
+5. KI-002/KI-003：结构插入与跨容器移动的精确源码 patch。
+6. R-7 ProComponents RC 版本回归矩阵。

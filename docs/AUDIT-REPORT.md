@@ -1,7 +1,8 @@
-# Ant Design Studio 工程审计报告（第一轮）
+# Ant Design Studio 工程审计报告（第一轮审计 + 第二/三轮整改记录）
 
-日期：2026-11-21 · 基线 Commit：`7287b2b`（初始导入）→ 本报告随本轮验证提交
+日期：2026-11-21 · 基线 Commit：`7287b2b`（初始导入）→ `247433a`（轮次1）→ `f6ab09e`/`e5807eb`/`9f16fff`（轮次2）→ 轮次3（TASK-001）
 审计方式：逐文件源码审查 + 真实运行验证（非 README 推断）。所有结论均有下方"证据索引"支撑。
+§1–§4 为第一轮审计原文（结论仍成立）；轮次 2/3 的整改与状态变化记录在 §5，遗留清单（§6）已按当前实际更新。
 
 ---
 
@@ -19,7 +20,7 @@
 | 拖拽/选中/属性联动 | ✅ | 属性修改 → 画布与 TSX 同步（`e2e-results.json` C_*），`evidence-02/03` |
 | TSX 输出可独立编译 | ✅ | 生成源码经独立 Vite 构建成功（F_*，`evidence-06-preview-drawer.png`） |
 | 反向解析 | ✅ | 静态 JSX 解析回画布成功（E_*，`evidence-05-roundtrip.png`） |
-| 代码保护 | ✅ | 语法错误/动态表达式/spread/未知组件均抛错且不覆盖源码（D_* + 引擎 32 项断言） |
+| 代码保护 | ✅ | 语法错误/动态表达式/spread/未知组件均抛错且不覆盖源码（D_* + 引擎 35 项 + patch 28 项断言，轮次3） |
 | 独立构建预览 | ✅ | 真实 Vite 构建 + iframe 隔离渲染，构建 ID 回显，失败返回 422 + 真实错误（F2） |
 
 ## 2. 目录与源码审查
@@ -34,7 +35,7 @@
 | 拖拽 | dnd-kit 或论证替代 | @dnd-kit/core 6.3.1 + utilities 3.2.2（面板拖入/画布移动/容器投放） | ✅ |
 | 状态 | Zustand 或论证替代 | **React useState + 纯函数 tree-ops**（论证：单一事实来源是 DesignDocument 不可变快照，全部编辑收敛于 `commitDocument` 一个入口，撤销栈即文档快照数组；无跨组件共享可变状态需求，引入外部 store 反而增加 IR 一致性风险。若后续多标签页/协作编辑，迁移 Zustand 成本仅为替换 Studio 顶层 state） | ✅（经论证的替代） |
 | 编辑器 | Monaco Editor | monaco-editor 0.57.0 + @monaco-editor/react 4.7.0 | ✅ |
-| AST | Babel Parser + Recast | @babel/parser 7.29.14 真实 AST 解析 ✅；**Recast 增量源码 patch 未落地**（当前反向解析为全量重建 IR + 稳定 ID 复用），已列 R-1/R-3 并有明确路线 | ⚠️ 部分（如实披露） |
+| AST | Babel Parser + Recast | @babel/parser 7.29.14 真实 AST 解析 ✅；**Recast 增量源码 patch 已落地**（轮次 3，`src/engine/source-patch.ts`：属性/文本/主题/同级交换增量 patch，动态节点拒绝保护，节点 loc sourceMap）。方案见 `docs/RECAST-TECHNICAL-PLAN.md` | ✅ 已落地（轮次3） |
 | 构建 | Vite | vite 8.3.8（设计器构建 + 独立预览构建均真实调用） | ✅ |
 | 预览 | 独立运行环境 | 独立进程 4175 + 隔离 workspace + 不同 origin iframe | ✅ |
 | 数据 | Design IR 统一事实来源 | v2：迁移闸门、纯函数操作、双向同步合同（docs/DESIGN-IR.md） | ✅ |
@@ -64,6 +65,7 @@ server/index.mjs        独立构建服务（express + vite.build API，端口 4
 - ✅ **无字符串替换冒充 AST**：`tsx-parser.ts` 使用 `@babel/parser` AST；动态表达式、spread、未知组件、多 return、async 均显式抛错。
 - ✅ **JSON 不作为交付物**：导出物为 `.tsx` 源码文件；Design IR 仅内部状态。
 - ⚠️ **codegen 是模板拼接而非 AST/Recast 增量 patch**：符合"IR→TSX"单向生成要求，但**尚不满足目标技术约束中的 `Babel Parser + Recast` 双向源码 patch**。当前反向解析是"全量重建 IR"，节点 ID 会重新生成（`code-node-N-uuid`），丢失选中态与 sourceMap。→ 列入遗留问题 R-3。
+  **【轮次3 已解决】**：新增 `src/engine/source-patch.ts`（Recast 增量 patch）与反向解析稳定 ID，见 §5.3 与 `docs/RECAST-TECHNICAL-PLAN.md`；上方 R-1/R-3 状态行已同步更新。
 - ⚠️ **无空实现**，但存在**功能子集**：属性面板只暴露注册表声明的 API 子集（代码内注释已如实声明，非虚假宣传）。
 
 ### 2.2 依赖兼容性（实测）
@@ -106,9 +108,10 @@ server/index.mjs        独立构建服务（express + vite.build API，端口 4
 - ✅ **画布内移动与排序**（第二轮新增）：节点拖拽手柄（dnd-kit）移动到容器内/同级位置；属性面板上移/下移；拒绝移入自身后代；撤销可恢复。
 - ⚠️ 缺口：插槽编辑仍为预留接口；拖拽排序目前为"移动到目标"而非精确插入位置指示。
 
-### E. 代码生成与双向联动 —— 达标（受限静态子集）
+### E. 代码生成与双向联动 —— 达标（轮次3 增量 patch 落地）
 - ✅ IR→TSX、Monaco 展示、画布改动即时同步代码、静态 JSX 解析回画布、失败保护原始代码、不支持的动态代码显式报错不静默丢失。
-- ⚠️ **缺口**：见 2.1 codegen 模板化问题；解析后节点 ID 重建导致选中态丢失。
+- ✅ **Recast 增量源码 patch（轮次3）**：属性/文本/主题/同级交换编辑只改目标 JSX 节点行，用户注释、格式、模块变量、自定义组件 import、动态事件函数字节保留；动态节点拒绝 patch 并上报原因。方案与验证见 `docs/RECAST-TECHNICAL-PLAN.md`、`evidence/sync-demo.md`、`tests/source-patch.test.ts`（28 断言）。
+- ✅ 反向解析稳定节点 ID + 节点 `loc` sourceMap（错误定位/未来双向高亮基础）。
 
 ### F. 独立构建预览 —— **关键验收项，实测通过**
 - ✅ 生成独立 React 项目（workspace 隔离于 `.studio-previews/workspaces/<id>`）。
@@ -158,18 +161,29 @@ npm run dev          # 同时启动 5173 设计器 + 4175 构建服务
 - 组件注册表扩充官方 API 子集（danger/ghost/href/maxLength/showCount/loading/dashed/ellipsis/copyable/pagination/flex），`slot|event|code` 编辑器接口预留。规范见 `docs/COMPONENT-REGISTRY.md`。
 - 验证：typecheck 零错误；build 退出码 0；引擎 32/32；E2E 全绿（含组件树联动、排序+撤销、构建预览 iframe）。
 
+### 5.3 轮次 3：双向源码同步 + ProTable 链路 + 安全治理（TASK-001）
+
+- **Recast 增量 patch 引擎**（`src/engine/source-patch.ts`）：`indexSource`（AST 索引 + `loc` sourceMap + 位置/类型稳定 id）、`patchByPath`（属性/文本）、`patchTheme`（token 就地改）、`moveInSource`（同级交换）、`insertInto`/`removeFrom`（结构）。Studio `commitDocument(next, patch?)` 全面接入；撤销/重做栈升级为 `{document, code}` 快照对；`applyCode` 解析后保留用户源码为权威。
+- **冲突策略**：动态节点/解析失败/节点失配 → 拒绝 patch、源码字节不变、原因上报 UI（不静默丢弃）。
+- **ProTable 链路修复**：`search/options` 官方类型为 `false | Config`，IR 布尔 `true` 在输出边界（codegen + patch + insert）经 `normalizeProTableProp` 归一为 `{}`，消除"构建预览失败"。
+- **Monaco 离线化**（KI-010）：`loader.config({monaco})` + Vite `?worker` 本地 worker，去除 jsdelivr CDN 依赖（曾致代码 Tab 卡死与 E2E 超时）。
+- **安全治理**（KI-011 / R-8）：`concurrently→9.2.5`（修 shell-quote critical）、`overrides.dompurify→3.4.18`（修 DOMPurify low；降级 monaco 无效）→ `npm audit` 4→**0**。详见 `docs/SECURITY-AUDIT.md`。
+- **测试**：`tests/source-patch.test.ts` 28 断言、`tests/sync-demo.ts` 6 场景真实 diff（`evidence/sync-demo.md`）、`tests/protable.e2e.py` 列/搜索/工具栏/分页/构建 iframe 全链路（`evidence/protable-e2e.json` + 5 截图）。引擎断言 32→35。
+- **档案**：`docs/TASK-001.md`、`docs/KNOWN-ISSUES.md`（KI-001..014）、`docs/RECAST-TECHNICAL-PLAN.md`。
+- 验证：typecheck 零错误；build 0；ENGINE 35/35 + PATCH 28/28 + DEMO_OK；smoke/protable E2E 全绿；audit 0 漏洞。
+
 ## 6. 遗留问题清单（按风险排序）
 
 | # | 问题 | 影响 | 状态 / 建议 |
 |---|---|---|---|
-| R-1 | 反向解析为全量重建 | ~~选中态丢失~~ | **部分修复**：稳定节点 ID 已实现（位置+类型复用）；剩余：Recast 保留格式 + sourceMap |
+| R-1 | 反向解析为全量重建 | ~~选中态丢失~~ | **已修复**：轮次2稳定ID + 轮次3 Recast 增量 patch（`source-patch.ts`，见 `docs/RECAST-TECHNICAL-PLAN.md`）；剩余：Code Node 混合编辑 |
 | R-2 | 属性元数据手工维护（9 组件子集） | 覆盖不了官方 API，维护成本线性增长 | 未动；建 `.d.ts` 自动采集管线（目标第 C 节） |
-| R-3 | codegen 模板拼接，非 AST/Recast 双向 | 与目标约束"Babel Parser + Recast"有差距 | 未动；下轮实现 source patch |
+| R-3 | ~~codegen 模板拼接，非 AST/Recast 双向~~ | — | **已修复**（轮次3）：可视化编辑经 Recast patch 只改目标节点，用户注释/格式/非视觉代码字节保留（evidence/sync-demo.md） |
 | R-4 | ~~独立构建未含 tsc 类型检查~~ | — | **已修复**（轮次 1，见 5.1）；后续可加构建超时与资源限额 |
 | R-5 | ~~`props.children` 与 `children[]` 双通道~~ | — | **已修复**（轮次 2，IR v2 + 自动迁移，见 5.2） |
 | R-6 | ~~画布内排序/组件树缺失~~ | 插槽编辑仍缺 | **基本修复**（轮次 2：树面板+移动+排序）；剩余：slot 编辑器、精确插入位置指示 |
 | R-7 | ProComponents 使用 RC 版 `3.1.15-9` | 上游 API 可能变动 | 未动；锁定并建版本矩阵测试 |
-| R-8 | npm audit 4 漏洞（2 critical） | 供应链风险 | 未动；定位后评估修复 |
+| R-8 | ~~npm audit 4 漏洞（2 critical）~~ | — | **已修复**（轮次3）：concurrently→9.2.5 修 shell-quote critical、overrides.dompurify→3.4.18 修 low，现 `found 0 vulnerabilities`。见 `docs/SECURITY-AUDIT.md` |
 | R-9 | 撤销栈不含代码编辑、无持久化保存 | 误操作可丢代码改动 | 未动；统一命令栈 + localStorage/服务端保存 |
 | R-10 | ~~antd Drawer/Alert deprecation~~ | — | **已修复**（轮次 2）：控制台实测 0 error |
 
